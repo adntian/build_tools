@@ -56,6 +56,15 @@ below.
 
 **Example**: Building **Desktop Editors** and **Document Server**
 
+# 设置github代理（国内太慢）
+```bash
+git config --global url."https://gh-proxy.com/https://github.com/".insteadOf https://github.com/
+```
+# 解决icu.make错误
+```
+  export PYTHONPATH=$PYTHONPATH:/path/to/modules
+  # /root/build_tools/scripts/core_common/modules
+```
 ```bash
 ./automate.py desktop server
 ```
