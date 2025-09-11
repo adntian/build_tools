@@ -59,6 +59,7 @@ below.
 # 设置github代理（国内太慢）
 ```bash
 git config --global url."https://gh-proxy.com/https://github.com/".insteadOf https://github.com/
+git config --global url."https://gh-proxy.com/https://github.com/Minoricew".insteadOf https://chromium.googlesource.com/chromium/tools
 ```
 # 解决icu.make错误
 ```
