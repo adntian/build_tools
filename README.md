@@ -65,6 +65,9 @@ git config --global url."https://gh-proxy.com/https://github.com/Minoricew".inst
 ```
   export PYTHONPATH=$PYTHONPATH:/path/to/modules
   # /root/build_tools/scripts/core_common/modules
+  
+  export PYTHONPATH=$PYTHONPATH:/root/build_tools/scripts/core_common/modules
+  # /root/build_tools/scripts/core_common/modules
 ```
 ```bash
 ./automate.py desktop server
