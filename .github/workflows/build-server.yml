@@ -19,12 +19,6 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-
-      - name: 创建工作目录
-        run: |
-          mkdir onlyoffice
-          cd onlyoffice
-      
       - name: 检出代码
         uses: actions/checkout@v4
         with:
@@ -62,14 +56,23 @@ jobs:
           python3 -m pip install --upgrade pip
           if [ -f requirements.txt ]; then python3 -m pip install -r requirements.txt; fi
       
+      - name: 清理npm冲突文件
+        run: |
+          sudo rm -f /usr/local/bin/grunt
+          sudo rm -f /usr/local/bin/pkg
+        continue-on-error: true
+      
       - name: 执行构建
         run: |
           python3 --version
           cd tools/linux
           pwd
+          ls
           if [ -n "${{ inputs.branch }}" ]; then
-            ./automate.py ${{ inputs.modules }} --branch=${{ inputs.branch }}
+            echo ${{ inputs.modules }} ${{ inputs.branch }}
+            python3 ./automate.py ${{ inputs.modules }} --branch=${{ inputs.branch }}
           else
+            echo ${{ inputs.modules }}
             python3 ./automate.py ${{ inputs.modules }}
           fi
       
