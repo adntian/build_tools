@@ -163,6 +163,24 @@ def make():
     base.copy_file("v8/third_party/jinja2/tests.py", "v8/third_party/jinja2/tests.py.bak")
     base.replaceInFile("v8/third_party/jinja2/tests.py", "from collections import Mapping", "try:\n    from collections.abc import Mapping\nexcept ImportError:\n    from collections import Mapping")
 
+  # Fix uintptr_t error in macros.h
+  macros_file = "v8/src/base/macros.h"
+  if base.is_file(macros_file) and not base.is_file(macros_file + ".bak"):
+    base.copy_file(macros_file, macros_file + ".bak")
+    content = base.readFile(macros_file)
+    if "#include <cstdint>" not in content:
+      # Add #include <cstdint> at the beginning after the copyright header
+      lines = content.split('\n')
+      insert_pos = 0
+      for i, line in enumerate(lines):
+        if line.startswith('#ifndef') or line.startswith('#define') or line.startswith('#include'):
+          insert_pos = i
+          break
+      if insert_pos > 0:
+        lines.insert(insert_pos, '#include <cstdint>')
+        base.writeFile(macros_file, '\n'.join(lines))
+        print("V8 macros.h patched to include <cstdint>")
+
   os.chdir("v8")
   
   gn_args = ["v8_static_library=true",
