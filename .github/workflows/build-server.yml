@@ -18,7 +18,7 @@ jobs:
   build-server:
     runs-on: ubuntu-latest
     container:
-      image: centos:7
+      image: quay.io/centos/centos:stream8
     
     steps:
       - name: 检出代码
@@ -28,8 +28,8 @@ jobs:
       
       - name: 安装系统依赖
         run: |
-          yum install -y epel-release
-          yum install -y \
+          dnf install -y epel-release
+          dnf install -y \
             gcc \
             gcc-c++ \
             make \
@@ -47,8 +47,11 @@ jobs:
             libxkbcommon-devel \
             libxkbcommon-x11-devel \
             p7zip \
+            p7zip-plugins \
             curl \
-            wget
+            wget \
+            diffutils \
+            which
       
       - name: 安装 Python 依赖
         run: |
