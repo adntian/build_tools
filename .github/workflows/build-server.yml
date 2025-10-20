@@ -19,6 +19,12 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+
+      - name: 创建工作目录
+        run: |
+          mkdir onlyoffice
+          cd onlyoffice
+      
       - name: 检出代码
         uses: actions/checkout@v4
         with:
@@ -58,11 +64,13 @@ jobs:
       
       - name: 执行构建
         run: |
+          python3 --version
           cd tools/linux
+          pwd
           if [ -n "${{ inputs.branch }}" ]; then
             ./automate.py ${{ inputs.modules }} --branch=${{ inputs.branch }}
           else
-            ./automate.py ${{ inputs.modules }}
+            python3 ./automate.py ${{ inputs.modules }}
           fi
       
       - name: 查找构建产物
