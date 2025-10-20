@@ -19,6 +19,42 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+      - name: 释放磁盘空间
+        run: |
+          echo "清理前的磁盘空间："
+          df -h
+          
+          # 删除不需要的软件和文件
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          
+          # 删除Docker镜像
+          docker rmi $(docker images -q) || true
+          
+          # 清理apt缓存
+          sudo apt-get clean
+          sudo apt-get autoremove -y
+          sudo apt-get autoclean -y
+          
+          # 删除大型软件包
+          sudo apt-get remove -y '^aspnetcore-.*' || true
+          sudo apt-get remove -y '^dotnet-.*' --fix-missing || true
+          sudo apt-get remove -y '^llvm-.*' --fix-missing || true
+          sudo apt-get remove -y 'php.*' --fix-missing || true
+          sudo apt-get remove -y '^mongodb-.*' --fix-missing || true
+          sudo apt-get remove -y '^mysql-.*' --fix-missing || true
+          sudo apt-get remove -y azure-cli google-chrome-stable firefox || true
+          sudo apt-get autoremove -y
+          sudo apt-get clean
+          
+          echo "清理后的磁盘空间："
+          df -h
+      
       - name: 检出代码
         uses: actions/checkout@v4
         with:
@@ -64,6 +100,9 @@ jobs:
       
       - name: 执行构建
         run: |
+          echo "构建前磁盘空间："
+          df -h
+          
           python3 --version
           cd tools/linux
           pwd
@@ -75,6 +114,30 @@ jobs:
             echo ${{ inputs.modules }}
             python3 ./automate.py ${{ inputs.modules }}
           fi
+          
+          echo "构建后磁盘空间："
+          df -h
+      
+      - name: 清理构建临时文件
+        run: |
+          echo "清理前磁盘空间："
+          df -h
+          
+          # 清理Qt源码（保留编译好的qt_build）
+          cd tools/linux
+          sudo rm -rf qt-everywhere-opensource-src-* || true
+          sudo rm -rf *.tar.xz || true
+          sudo rm -rf *.7z || true
+          
+          # 清理npm缓存
+          sudo rm -rf /root/.npm || true
+          sudo rm -rf ~/.npm || true
+          
+          # 清理其他构建缓存
+          sudo rm -rf /tmp/* || true
+          
+          echo "清理后磁盘空间："
+          df -h
       
       - name: 查找构建产物
         id: find_artifacts
