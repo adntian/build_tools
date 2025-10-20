@@ -1,0 +1,138 @@
+name: Build Server
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: '构建分支'
+        required: false
+        type: string
+        default: ''
+      modules:
+        description: '构建模块 (默认: server)'
+        required: false
+        type: string
+        default: 'server'
+
+jobs:
+  build-server:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: 设置 Python 环境
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            git \
+            libglu1-mesa-dev \
+            libgl1-mesa-dev \
+            libxkbcommon-x11-0 \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-render-util0 \
+            libxcb-xinerama0 \
+            libxcb-xkb1 \
+            libxkbcommon-dev \
+            p7zip-full \
+            curl
+      
+      - name: 安装 Python 依赖
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      
+      - name: 执行构建
+        run: |
+          cd tools/linux
+          if [ -n "${{ inputs.branch }}" ]; then
+            ./automate.py ${{ inputs.modules }} --branch=${{ inputs.branch }}
+          else
+            ./automate.py ${{ inputs.modules }}
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: 查找构建产物
+        id: find_artifacts
+        run: |
+          echo "查找构建产物..."
+          if [ -d "out" ]; then
+            echo "找到 out 目录"
+            ls -lah out/
+            echo "artifact_path=out" >> $GITHUB_OUTPUT
+          elif [ -d "tools/linux/out" ]; then
+            echo "找到 tools/linux/out 目录"
+            ls -lah tools/linux/out/
+            echo "artifact_path=tools/linux/out" >> $GITHUB_OUTPUT
+          elif [ -d "server" ]; then
+            echo "找到 server 目录"
+            ls -lah server/
+            echo "artifact_path=server" >> $GITHUB_OUTPUT
+          else
+            echo "在根目录查找所有可能的产物目录..."
+            find . -maxdepth 3 -type d \( -name "out" -o -name "build" -o -name "dist" -o -name "*server*" \) -exec ls -lah {} \;
+            echo "artifact_path=." >> $GITHUB_OUTPUT
+          fi
+      
+      - name: 打包构建产物
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          ARTIFACT_NAME="onlyoffice-server-build-${TIMESTAMP}"
+          
+          if [ -d "out" ]; then
+            tar -czf ${ARTIFACT_NAME}.tar.gz -C out .
+          elif [ -d "tools/linux/out" ]; then
+            tar -czf ${ARTIFACT_NAME}.tar.gz -C tools/linux/out .
+          elif [ -d "server" ]; then
+            tar -czf ${ARTIFACT_NAME}.tar.gz -C server .
+          else
+            echo "未找到标准构建目录，打包整个workspace（排除源代码）"
+            tar -czf ${ARTIFACT_NAME}.tar.gz \
+              --exclude='.git' \
+              --exclude='node_modules' \
+              --exclude='qt_build' \
+              --exclude='qt-everywhere-opensource-src-*' \
+              --exclude='*.tar.xz' \
+              --exclude='*.7z' \
+              .
+          fi
+          
+          echo "ARTIFACT_NAME=${ARTIFACT_NAME}" >> $GITHUB_ENV
+      
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.ARTIFACT_NAME }}.tar.gz
+          retention-days: 30
+      
+      - name: 构建摘要
+        run: |
+          echo "## 构建完成 ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 构建信息" >> $GITHUB_STEP_SUMMARY
+          echo "- **构建模块**: ${{ inputs.modules }}" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ inputs.branch }}" ]; then
+            echo "- **构建分支**: ${{ inputs.branch }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **构建分支**: 当前分支" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "- **构建时间**: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 下载产物" >> $GITHUB_STEP_SUMMARY
+          echo "构建产物已打包为: \`${ARTIFACT_NAME}.tar.gz\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "请在 Actions 页面的 Artifacts 部分下载构建产物。" >> $GITHUB_STEP_SUMMARY
+
