@@ -163,30 +163,56 @@ def make():
     base.copy_file("v8/third_party/jinja2/tests.py", "v8/third_party/jinja2/tests.py.bak")
     base.replaceInFile("v8/third_party/jinja2/tests.py", "from collections import Mapping", "try:\n    from collections.abc import Mapping\nexcept ImportError:\n    from collections import Mapping")
 
-  # Fix uintptr_t and uint8_t errors by adding <cstdint> to V8 base headers
-  v8_headers_to_patch = [
-    "v8/src/base/macros.h",
-    "v8/src/base/logging.h",
-    "v8/src/base/bounds.h",
-    "v8/src/inspector/v8-string-conversions.h"
-  ]
-  
-  for header_file in v8_headers_to_patch:
-    if base.is_file(header_file) and not base.is_file(header_file + ".bak"):
-      base.copy_file(header_file, header_file + ".bak")
-      content = base.readFile(header_file)
-      if "#include <cstdint>" not in content:
-        # Add #include <cstdint> after the first existing #include
-        lines = content.split('\n')
-        insert_pos = -1
-        for i, line in enumerate(lines):
-          if line.strip().startswith('#include'):
-            insert_pos = i + 1
-            break
-        if insert_pos > 0:
-          lines.insert(insert_pos, '#include <cstdint>')
-          base.writeFile(header_file, '\n'.join(lines))
-          print(f"V8 {header_file} patched to include <cstdint>")
+  # Fix uintptr_t, uint8_t, uint16_t etc. errors by adding <cstdint> to V8 headers
+  # Strategy: Search all .h files that use these types but don't include <cstdint>
+  print("Patching V8 headers to include <cstdint>...")
+
+  import subprocess
+  import re
+
+  # Find all header files that use uint*_t or int*_t types
+  v8_src_dirs = ["v8/src/base", "v8/src/inspector"]
+  uint_pattern = re.compile(r'\b(uint8_t|uint16_t|uint32_t|uint64_t|int8_t|int16_t|int32_t|int64_t|uintptr_t|intptr_t)\b')
+
+  for src_dir in v8_src_dirs:
+    if not base.is_dir(src_dir):
+      continue
+
+    try:
+      # Find all .h files in the directory
+      result = subprocess.run(
+        ["find", src_dir, "-name", "*.h", "-type", "f"],
+        capture_output=True, text=True, check=True
+      )
+      header_files = result.stdout.strip().split('\n')
+
+      for header_file in header_files:
+        if not header_file or not base.is_file(header_file):
+          continue
+
+        content = base.readFile(header_file)
+
+        # Check if file uses uint*_t types and doesn't include <cstdint>
+        if uint_pattern.search(content) and "#include <cstdint>" not in content:
+          if not base.is_file(header_file + ".bak"):
+            base.copy_file(header_file, header_file + ".bak")
+
+            # Add #include <cstdint> after the first existing #include
+            lines = content.split('\n')
+            insert_pos = -1
+            for i, line in enumerate(lines):
+              if line.strip().startswith('#include'):
+                insert_pos = i + 1
+                break
+
+            if insert_pos > 0:
+              lines.insert(insert_pos, '#include <cstdint>')
+              base.writeFile(header_file, '\n'.join(lines))
+              print(f"  Patched: {header_file}")
+    except Exception as e:
+      print(f"Warning: Failed to scan {src_dir}: {e}")
+
+  print("V8 header patching complete.")
 
   os.chdir("v8")
 
