@@ -167,7 +167,8 @@ def make():
   v8_headers_to_patch = [
     "v8/src/base/macros.h",
     "v8/src/base/logging.h",
-    "v8/src/base/bounds.h"
+    "v8/src/base/bounds.h",
+    "v8/src/inspector/v8-string-conversions.h"
   ]
   
   for header_file in v8_headers_to_patch:
