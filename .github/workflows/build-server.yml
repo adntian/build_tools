@@ -68,6 +68,18 @@ jobs:
       - name: 安装系统依赖
         run: |
           sudo apt-get update
+
+          # 添加 Ubuntu Toolchain PPA 以获取新版本的 GCC/libstdc++
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get update
+
+          # 安装 GCC 13 和新版 libstdc++
+          sudo apt-get install -y gcc-13 g++-13 libstdc++-13-dev
+
+          # 设置 GCC 13 为默认编译器
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 100
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 100
+
           sudo apt-get install -y \
             build-essential \
             git \
