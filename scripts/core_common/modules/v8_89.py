@@ -188,12 +188,20 @@ def make():
           print(f"V8 {header_file} patched to include <cstdint>")
 
   os.chdir("v8")
-  
+
   gn_args = ["v8_static_library=true",
              "is_component_build=false",
              "v8_monolithic=true",
              "v8_use_external_startup_data=false",
              "treat_warnings_as_errors=false"]
+
+  # Remove or rename V8's bundled libstdc++ to force use of system library
+  # This avoids GLIBCXX version conflicts with system ICU
+  v8_libstdcxx = "./third_party/llvm-build/Release+Asserts/lib/libstdc++.so.6"
+  if base.is_file(v8_libstdcxx) and not base.is_file(v8_libstdcxx + ".bak"):
+    print("Renaming V8's bundled libstdc++ to use system version")
+    base.copy_file(v8_libstdcxx, v8_libstdcxx + ".bak")
+    base.delete_file(v8_libstdcxx)
 
   if config.check_option("platform", "linux_64"):
     base.cmd2("gn", ["gen", "out.gn/linux_64", make_args(gn_args, "linux")])
