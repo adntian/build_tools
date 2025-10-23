@@ -163,23 +163,29 @@ def make():
     base.copy_file("v8/third_party/jinja2/tests.py", "v8/third_party/jinja2/tests.py.bak")
     base.replaceInFile("v8/third_party/jinja2/tests.py", "from collections import Mapping", "try:\n    from collections.abc import Mapping\nexcept ImportError:\n    from collections import Mapping")
 
-  # Fix uintptr_t error in macros.h
-  macros_file = "v8/src/base/macros.h"
-  if base.is_file(macros_file) and not base.is_file(macros_file + ".bak"):
-    base.copy_file(macros_file, macros_file + ".bak")
-    content = base.readFile(macros_file)
-    if "#include <cstdint>" not in content:
-      # Add #include <cstdint> at the beginning after the copyright header
-      lines = content.split('\n')
-      insert_pos = 0
-      for i, line in enumerate(lines):
-        if line.startswith('#ifndef') or line.startswith('#define') or line.startswith('#include'):
-          insert_pos = i
-          break
-      if insert_pos > 0:
-        lines.insert(insert_pos, '#include <cstdint>')
-        base.writeFile(macros_file, '\n'.join(lines))
-        print("V8 macros.h patched to include <cstdint>")
+  # Fix uintptr_t and uint8_t errors by adding <cstdint> to V8 base headers
+  v8_headers_to_patch = [
+    "v8/src/base/macros.h",
+    "v8/src/base/logging.h",
+    "v8/src/base/bounds.h"
+  ]
+  
+  for header_file in v8_headers_to_patch:
+    if base.is_file(header_file) and not base.is_file(header_file + ".bak"):
+      base.copy_file(header_file, header_file + ".bak")
+      content = base.readFile(header_file)
+      if "#include <cstdint>" not in content:
+        # Add #include <cstdint> after the first existing #include
+        lines = content.split('\n')
+        insert_pos = -1
+        for i, line in enumerate(lines):
+          if line.strip().startswith('#include'):
+            insert_pos = i + 1
+            break
+        if insert_pos > 0:
+          lines.insert(insert_pos, '#include <cstdint>')
+          base.writeFile(header_file, '\n'.join(lines))
+          print(f"V8 {header_file} patched to include <cstdint>")
 
   os.chdir("v8")
   
