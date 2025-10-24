@@ -12,10 +12,12 @@ def make():
 
   base_dir = base.get_script_dir() + "/../../core/Common/3dParty/md"
 
-  # Set PYTHONPATH to include build_tools scripts directory
-  old_env = dict(os.environ)
+  # Calculate PYTHONPATH - use absolute path
   scripts_dir = base.get_script_dir() + "/../.."
   pythonpath = os.path.abspath(scripts_dir)
+
+  # Set PYTHONPATH to include build_tools scripts directory
+  old_env = dict(os.environ)
   if "PYTHONPATH" in os.environ:
     pythonpath = pythonpath + os.pathsep + os.environ["PYTHONPATH"]
   os.environ["PYTHONPATH"] = pythonpath

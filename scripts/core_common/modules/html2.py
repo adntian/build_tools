@@ -21,6 +21,10 @@ def make():
 
   base_dir = base.get_script_dir() + "/../../core/Common/3dParty/html"
 
+  # Calculate PYTHONPATH before changing directory
+  scripts_dir = base.get_script_dir() + "/../.."
+  pythonpath = os.path.abspath(scripts_dir)
+
   os.chdir(base_dir)
   base.check_module_version("2", clear_module)
   os.chdir(old_cur_dir)
@@ -28,8 +32,6 @@ def make():
   # Set PYTHONPATH to include build_tools scripts directory
   # so that fetch.py can import config module
   old_env = dict(os.environ)
-  scripts_dir = base.get_script_dir() + "/../.."
-  pythonpath = os.path.abspath(scripts_dir)
   if "PYTHONPATH" in os.environ:
     pythonpath = pythonpath + os.pathsep + os.environ["PYTHONPATH"]
   os.environ["PYTHONPATH"] = pythonpath
