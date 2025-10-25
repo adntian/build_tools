@@ -105,6 +105,15 @@ def make():
       base.copy_file(base_dir + "/icu/cross_build_install/lib/libicudata.so." + icu_major + "." + icu_minor, base_dir + "/linux_64/build/libicudata.so." + icu_major)
       base.copy_file(base_dir + "/icu/cross_build_install/lib/libicuuc.so." + icu_major + "." + icu_minor, base_dir + "/linux_64/build/libicuuc.so." + icu_major)
       base.copy_dir(base_dir + "/icu/cross_build_install/include", base_dir + "/linux_64/build/include")
+
+      # Create symlinks for other versions (e.g., libicuuc.so.74) that may be referenced
+      # This fixes linking errors when code expects different ICU versions
+      os.chdir(base_dir + "/linux_64/build")
+      if not base.is_file("libicudata.so.74"):
+        base.cmd("ln", ["-sf", "libicudata.so." + icu_major, "libicudata.so.74"], True)
+      if not base.is_file("libicuuc.so.74"):
+        base.cmd("ln", ["-sf", "libicuuc.so." + icu_major, "libicuuc.so.74"], True)
+      os.chdir(base_dir)
       
     if config.check_option("platform", "linux_arm64") and not base.is_dir(base_dir + "/linux_arm64") and not base.is_os_arm():
       base.create_dir(base_dir + "/icu/linux_arm64")
