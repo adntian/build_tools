@@ -111,10 +111,12 @@ jobs:
         continue-on-error: true
       
       - name: 执行构建
+        env:
+          PYTHONPATH: ${{ github.workspace }}/scripts
         run: |
           echo "构建前磁盘空间："
           df -h
-          
+
           python3 --version
           cd tools/linux
           pwd
@@ -126,7 +128,7 @@ jobs:
             echo ${{ inputs.modules }}
             python3 ./automate.py ${{ inputs.modules }}
           fi
-          
+
           echo "构建后磁盘空间："
           df -h
       
