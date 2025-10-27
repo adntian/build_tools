@@ -584,7 +584,13 @@ def git_update(repo, is_no_errors=False, is_current_dir=False, git_owner=""):
       print("branch does not exist...")
       print("switching to master...")
       cmd("git", ["checkout", "-f", "master"])
-    cmd("git", ["submodule", "update", "--init", "--recursive"], True)
+    # Initialize submodules - fail on error for critical repos like core
+    is_critical_repo = (repo == "core" or repo == "desktop-sdk")
+    print(f"Initializing submodules for {repo}...")
+    ret_submodule = cmd("git", ["submodule", "update", "--init", "--recursive"], not is_critical_repo)
+    if ret_submodule != 0 and is_critical_repo:
+      print(f"ERROR: Failed to initialize submodules for {repo}")
+      print("This may cause build failures due to missing dependencies")
   if (0 != config.option("branch").find("tags/")):
     cmd("git", ["pull"], False if ("1" != config.option("update-light")) else True)
     cmd("git", ["submodule", "update", "--recursive", "--remote"], True)
