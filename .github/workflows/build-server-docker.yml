@@ -145,18 +145,20 @@ jobs:
                 ls -lah ../../out/ || echo '未找到 out 目录'"
           fi
 
-          echo "ls -lah ../../out/:"
-          ls -lah ../../out/
-
-          echo "ls -lah ${{ github.workspace }}/out/:"
-          ls -lah ${{ github.workspace }}/out/
+          pwd
 
           echo "ls -lah ./"
           ls -lah ./
 
+          echo "ls -lah ../"
+          ls -lah ../
+
+          echo "ls -lah ../../"
+          ls -lah ../../
+
           echo "ls -lah ../../../"
           ls -lah ../../../
-          
+
           echo "=== 构建后磁盘空间 ==="
           df -h
           
