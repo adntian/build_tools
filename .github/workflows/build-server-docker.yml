@@ -113,30 +113,37 @@ jobs:
           df -h
           
           echo "=== 开始构建 ==="
-          docker run --rm \
-            -v ${{ github.workspace }}/out:/build_tools/out \
-            onlyoffice-document-editors-builder \
-            sh -c "
-              set -e
-              
-              echo '=== 显示构建环境信息 ==='
-              python --version
-              git --version
-              
-              echo '=== 开始构建 ==='
-              cd tools/linux
-              
-              if [ -n '${{ inputs.branch }}' ]; then
-                echo '构建模块: ${{ inputs.modules }}, 分支: ${{ inputs.branch }}'
-                python ./automate.py ${{ inputs.modules }} --branch=${{ inputs.branch }}
-              else
-                echo '构建模块: ${{ inputs.modules }}'
-                python ./automate.py ${{ inputs.modules }}
-              fi
-              
-              echo '=== 构建完成 ==='
-              ls -lah /build_tools/out/
-            "
+          
+          # 根据是否指定分支来构建不同的命令
+          if [ -n "${{ inputs.branch }}" ]; then
+            echo "构建模块: ${{ inputs.modules }}, 分支: ${{ inputs.branch }}"
+            docker run --rm \
+              -v ${{ github.workspace }}/out:/build_tools/out \
+              onlyoffice-document-editors-builder \
+              sh -c "set -e && \
+                echo '=== 显示构建环境信息 ===' && \
+                python --version && \
+                pwd && \
+                echo '=== 开始构建 ===' && \
+                cd tools/linux && \
+                python ./automate.py ${{ inputs.modules }} --branch=${{ inputs.branch }} && \
+                echo '=== 构建完成 ===' && \
+                ls -lah /build_tools/out/ || echo '未找到 out 目录'"
+          else
+            echo "构建模块: ${{ inputs.modules }}"
+            docker run --rm \
+              -v ${{ github.workspace }}/out:/build_tools/out \
+              onlyoffice-document-editors-builder \
+              sh -c "set -e && \
+                echo '=== 显示构建环境信息 ===' && \
+                python --version && \
+                pwd && \
+                echo '=== 开始构建 ===' && \
+                cd tools/linux && \
+                python ./automate.py ${{ inputs.modules }} && \
+                echo '=== 构建完成 ===' && \
+                ls -lah /build_tools/out/ || echo '未找到 out 目录'"
+          fi
           
           echo "=== 构建后磁盘空间 ==="
           df -h
