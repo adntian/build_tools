@@ -107,7 +107,7 @@ jobs:
       - name: 在 Docker 容器中执行构建
         run: |
           echo "=== 准备构建目录 ==="
-          mkdir -p ${{ github.workspace }}/out
+          mkdir out
           
           echo "=== 构建前磁盘空间 ==="
           df -h
@@ -118,7 +118,7 @@ jobs:
           if [ -n "${{ inputs.branch }}" ]; then
             echo "构建模块: ${{ inputs.modules }}, 分支: ${{ inputs.branch }}"
             docker run --rm \
-              -v ${{ github.workspace }}/out:/build_tools/out \
+              -v ./out:/build_tools/out \
               onlyoffice-document-editors-builder \
               sh -c "set -e && \
                 echo '=== 显示构建环境信息 ===' && \
@@ -132,7 +132,7 @@ jobs:
           else
             echo "构建模块: ${{ inputs.modules }}"
             docker run --rm \
-              -v ${{ github.workspace }}/out:/build_tools/out \
+              -v ./out:/build_tools/out \
               onlyoffice-document-editors-builder \
               sh -c "set -e && \
                 echo '=== 显示构建环境信息 ===' && \
@@ -142,7 +142,7 @@ jobs:
                 cd tools/linux && \
                 python ./automate.py ${{ inputs.modules }} && \
                 echo '=== 构建完成 ===' && \
-                ls -lah ../../out/ || echo '未找到 out 目录'"
+                ls -lah ./out/ || echo '未找到 out 目录'"
           fi
 
           pwd
@@ -150,53 +150,14 @@ jobs:
           echo "ls -lah ./"
           ls -lah ./
 
-          echo "ls -lah ../"
-          ls -lah ../
-
-          echo "ls -lah ../../"
-          ls -lah ../../
-
-          echo "ls -lah ../../../"
-          ls -lah ../../../
+          echo "ls -lah ./out/"
+          ls -lah ./out/
 
           echo "=== 构建后磁盘空间 ==="
           df -h
           
           echo "=== 检查构建产物 ==="
           ls -lah ${{ github.workspace }}/out/
-      
-      - name: 清理构建临时文件
-        if: ${{ inputs.clean_disk }}
-        run: |
-          echo "清理前磁盘空间："
-          df -h
-          
-          # 清理Qt源码和压缩包
-          cd tools/linux
-          sudo rm -rf qt-everywhere-opensource-src-* || true
-          sudo rm -rf *.tar.xz || true
-          sudo rm -rf *.tar.gz || true
-          sudo rm -rf *.7z || true
-          sudo rm -rf *.zip || true
-          
-          # 清理各种缓存
-          sudo rm -rf /root/.npm || true
-          sudo rm -rf ~/.npm || true
-          sudo rm -rf /root/.cache || true
-          sudo rm -rf ~/.cache || true
-          sudo rm -rf /tmp/* || true
-          sudo rm -rf /var/tmp/* || true
-          
-          # 清理Docker镜像
-          docker rmi onlyoffice-document-editors-builder || true
-          docker system prune -af || true
-          
-          # 显示最大的目录
-          echo "最大的目录："
-          du -h --max-depth=2 . 2>/dev/null | sort -hr | head -20 || true
-          
-          echo "清理后磁盘空间："
-          df -h
       
       - name: 查找构建产物
         id: find_artifacts
