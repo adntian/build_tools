@@ -168,6 +168,7 @@ jobs:
               echo '=== 显示构建环境信息 ==='
               gcc --version
               g++ --version
+              python3 --version
               python --version
               git --version
               
@@ -176,10 +177,10 @@ jobs:
               
               if [ -n '${{ inputs.branch }}' ]; then
                 echo '构建模块: ${{ inputs.modules }}, 分支: ${{ inputs.branch }}'
-                python ./automate.py ${{ inputs.modules }} --branch=${{ inputs.branch }}
+                python3 ./automate.py ${{ inputs.modules }} --branch=${{ inputs.branch }}
               else
                 echo '构建模块: ${{ inputs.modules }}'
-                python ./automate.py ${{ inputs.modules }}
+                python3 ./automate.py ${{ inputs.modules }}
               fi
               
               echo '=== 构建后磁盘空间 ==='
