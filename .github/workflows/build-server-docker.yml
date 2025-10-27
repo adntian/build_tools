@@ -142,8 +142,20 @@ jobs:
                 cd tools/linux && \
                 python ./automate.py ${{ inputs.modules }} && \
                 echo '=== 构建完成 ===' && \
-                ls -lah /build_tools/out/ || echo '未找到 out 目录'"
+                ls -lah ../../out/ || echo '未找到 out 目录'"
           fi
+
+          echo "ls -lah ../../out/:"
+          ls -lah ../../out/
+
+          echo "ls -lah ${{ github.workspace }}/out/:"
+          ls -lah ${{ github.workspace }}/out/
+
+          echo "ls -lah ./"
+          ls -lah ./
+
+          echo "ls -lah ../../../"
+          ls -lah ../../../
           
           echo "=== 构建后磁盘空间 ==="
           df -h
