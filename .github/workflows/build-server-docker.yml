@@ -13,6 +13,11 @@ on:
         required: false
         type: string
         default: 'server'
+      clean_disk:
+        description: '释放磁盘空间 (测试时可关闭以节省时间)'
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   build-server:
@@ -20,6 +25,7 @@ jobs:
     
     steps:
       - name: 释放磁盘空间
+        if: ${{ inputs.clean_disk }}
         run: |
           echo "清理前的磁盘空间："
           df -h
@@ -119,7 +125,26 @@ jobs:
 
           # 添加PPA获取较新版本的工具
           RUN add-apt-repository -y ppa:ubuntu-toolchain-r/test && \
+              add-apt-repository -y ppa:deadsnakes/ppa && \
               apt-get update
+
+          # 安装 Python 3.8 及相关工具 (支持 f-string 语法)
+          RUN apt-get install -y \
+              python3.8 \
+              python3.8-dev \
+              python3.8-distutils \
+              python3.8-venv
+
+          # 下载并安装 pip for Python 3.8
+          RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && \
+              python3.8 get-pip.py && \
+              rm get-pip.py
+
+          # 设置 Python 3.8 为默认 python3 和 python
+          RUN rm -f /usr/bin/python3 /usr/bin/python && \
+              ln -s /usr/bin/python3.8 /usr/bin/python3 && \
+              ln -s /usr/bin/python3.8 /usr/bin/python && \
+              python3 --version && python --version
 
           # 安装GCC 7（16.04上较新的版本）
           RUN apt-get install -y gcc-7 g++-7 && \
