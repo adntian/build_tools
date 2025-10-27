@@ -584,13 +584,25 @@ def git_update(repo, is_no_errors=False, is_current_dir=False, git_owner=""):
       print("branch does not exist...")
       print("switching to master...")
       cmd("git", ["checkout", "-f", "master"])
-    # Initialize submodules - fail on error for critical repos like core
+    # Initialize submodules - retry on failure for critical repos
     is_critical_repo = (repo == "core" or repo == "desktop-sdk")
     print(f"Initializing submodules for {repo}...")
-    ret_submodule = cmd("git", ["submodule", "update", "--init", "--recursive"], not is_critical_repo)
-    if ret_submodule != 0 and is_critical_repo:
-      print(f"ERROR: Failed to initialize submodules for {repo}")
-      print("This may cause build failures due to missing dependencies")
+    max_retries = 3 if is_critical_repo else 1
+    for attempt in range(max_retries):
+      ret_submodule = cmd("git", ["submodule", "update", "--init", "--recursive"], True)
+      if ret_submodule == 0:
+        print(f"Submodules initialized successfully for {repo}")
+        break
+      elif attempt < max_retries - 1:
+        print(f"Submodule initialization attempt {attempt + 1} failed, retrying...")
+        import time
+        time.sleep(5)
+      else:
+        if is_critical_repo:
+          print(f"ERROR: Failed to initialize submodules for {repo} after {max_retries} attempts")
+          print("This may cause build failures due to missing dependencies like heif")
+        else:
+          print(f"Warning: Submodule initialization failed for {repo}")
   if (0 != config.option("branch").find("tags/")):
     cmd("git", ["pull"], False if ("1" != config.option("update-light")) else True)
     cmd("git", ["submodule", "update", "--recursive", "--remote"], True)
