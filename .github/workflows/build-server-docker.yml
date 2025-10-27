@@ -1,4 +1,4 @@
-name: Build Server (Docker Ubuntu 16.04)
+name: Build Server (Docker Official)
 
 on:
   workflow_dispatch:
@@ -95,90 +95,31 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: 构建 Docker 镜像
+      - name: 构建 Docker 镜像 (使用官方 Dockerfile)
         run: |
-          cat > Dockerfile.build << 'EOF'
-          FROM ubuntu:18.04
-
-          # 设置非交互模式
-          ENV DEBIAN_FRONTEND=noninteractive
-          ENV TZ=Asia/Shanghai
-
-          # 更新软件源
-          RUN apt-get update
-
-          # 安装基础依赖 (Ubuntu 18.04 默认 Python 3.6，支持 f-string)
-          RUN apt-get install -y \
-              build-essential \
-              git \
-              python3 \
-              python3-pip \
-              python3-dev \
-              curl \
-              wget \
-              ca-certificates \
-              p7zip-full \
-              software-properties-common \
-              apt-transport-https
-
-          # 设置 python3 为默认 python
-          RUN ln -sf /usr/bin/python3 /usr/bin/python
-
-          # 升级 pip
-          RUN python3 -m pip install --upgrade pip setuptools wheel
-
-          # 添加PPA获取较新版本的 GCC
-          RUN add-apt-repository -y ppa:ubuntu-toolchain-r/test && \
-              apt-get update
-
-          # 安装GCC 9
-          RUN apt-get install -y gcc-9 g++-9 && \
-              update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 100 && \
-              update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 100
-
-          # 安装Qt依赖
-          RUN apt-get install -y \
-              libglu1-mesa-dev \
-              libgl1-mesa-dev \
-              libxkbcommon-x11-0 \
-              libxcb-icccm4 \
-              libxcb-image0 \
-              libxcb-keysyms1 \
-              libxcb-render-util0 \
-              libxcb-xinerama0 \
-              libxcb-xkb1 \
-              libxkbcommon-dev \
-              libx11-xcb-dev \
-              libxrender-dev \
-              libxi-dev \
-              libxext-dev
-
-          # 设置工作目录
-          WORKDIR /workspace
-
-          # 设置Git安全目录
-          RUN git config --global --add safe.directory /workspace
-
-          CMD ["/bin/bash"]
-          EOF
-
-          docker build -f Dockerfile.build -t onlyoffice-build:ubuntu16.04 .
+          echo "=== 构建 Docker 镜像 ==="
+          echo "使用官方 Dockerfile (Ubuntu 20.04 + Python 3.10)"
+          docker build --tag onlyoffice-document-editors-builder .
+          
+          echo "=== 镜像构建完成 ==="
+          docker images | grep onlyoffice
       
       - name: 在 Docker 容器中执行构建
         run: |
+          echo "=== 准备构建目录 ==="
+          mkdir -p ${{ github.workspace }}/out
+          
+          echo "=== 构建前磁盘空间 ==="
+          df -h
+          
+          echo "=== 开始构建 ==="
           docker run --rm \
-            -v ${{ github.workspace }}:/workspace \
-            -w /workspace \
-            onlyoffice-build:ubuntu16.04 \
-            /bin/bash -c "
+            -v ${{ github.workspace }}/out:/build_tools/out \
+            onlyoffice-document-editors-builder \
+            sh -c "
               set -e
-              echo '=== 构建前磁盘空间 ==='
-              df -h
               
               echo '=== 显示构建环境信息 ==='
-              gcc --version
-              g++ --version
-              python3 --version
               python --version
               git --version
               
@@ -187,15 +128,21 @@ jobs:
               
               if [ -n '${{ inputs.branch }}' ]; then
                 echo '构建模块: ${{ inputs.modules }}, 分支: ${{ inputs.branch }}'
-                python3 ./automate.py ${{ inputs.modules }} --branch=${{ inputs.branch }}
+                python ./automate.py ${{ inputs.modules }} --branch=${{ inputs.branch }}
               else
                 echo '构建模块: ${{ inputs.modules }}'
-                python3 ./automate.py ${{ inputs.modules }}
+                python ./automate.py ${{ inputs.modules }}
               fi
               
-              echo '=== 构建后磁盘空间 ==='
-              df -h
+              echo '=== 构建完成 ==='
+              ls -lah /build_tools/out/
             "
+          
+          echo "=== 构建后磁盘空间 ==="
+          df -h
+          
+          echo "=== 检查构建产物 ==="
+          ls -lah ${{ github.workspace }}/out/
       
       - name: 清理构建临时文件
         if: ${{ inputs.clean_disk }}
@@ -220,7 +167,7 @@ jobs:
           sudo rm -rf /var/tmp/* || true
           
           # 清理Docker镜像
-          docker rmi onlyoffice-build:ubuntu16.04 || true
+          docker rmi onlyoffice-document-editors-builder || true
           docker system prune -af || true
           
           # 显示最大的目录
@@ -315,7 +262,7 @@ jobs:
           echo "## 构建完成 ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 构建信息" >> $GITHUB_STEP_SUMMARY
-          echo "- **构建环境**: Docker Ubuntu 16.04" >> $GITHUB_STEP_SUMMARY
+          echo "- **构建环境**: Docker (Official Dockerfile: Ubuntu 20.04 + Python 3.10)" >> $GITHUB_STEP_SUMMARY
           echo "- **构建模块**: ${{ inputs.modules }}" >> $GITHUB_STEP_SUMMARY
           if [ -n "${{ inputs.branch }}" ]; then
             echo "- **构建分支**: ${{ inputs.branch }}" >> $GITHUB_STEP_SUMMARY
