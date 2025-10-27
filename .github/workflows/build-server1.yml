@@ -1,0 +1,281 @@
+name: Build Server1
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: '构建分支'
+        required: false
+        type: string
+        default: ''
+      modules:
+        description: '构建模块 (默认: server)'
+        required: false
+        type: string
+        default: 'server'
+
+jobs:
+  build-server:
+    runs-on: ubuntu-20.04
+    
+    steps:
+      - name: 释放磁盘空间
+        run: |
+          echo "清理前的磁盘空间："
+          df -h
+          
+          # 删除不需要的大型工具和SDK
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          
+          # 删除更多不需要的工具链
+          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf /usr/local/share/powershell
+          sudo rm -rf /usr/local/share/chromium
+          sudo rm -rf /usr/local/lib/node_modules
+          sudo rm -rf /usr/share/rust
+          sudo rm -rf /opt/microsoft
+          
+          # 删除文档和man页面
+          sudo rm -rf /usr/share/doc/*
+          sudo rm -rf /usr/share/man/*
+          sudo rm -rf /usr/share/locale/*
+          
+          # 删除 Kubernetes 和云工具
+          sudo rm -rf /usr/local/bin/kubectl
+          sudo rm -rf /usr/local/bin/kustomize
+          sudo rm -rf /usr/local/bin/helm
+          sudo rm -rf /usr/local/bin/terraform
+          sudo rm -rf /usr/local/bin/packer
+          sudo rm -rf /opt/hostedtoolcache/go
+          sudo rm -rf /opt/hostedtoolcache/Ruby
+          sudo rm -rf /opt/hostedtoolcache/Python
+          
+          # 删除Docker镜像和容器
+          docker system prune -af --volumes || true
+          sudo rm -rf /var/lib/docker
+          
+          # 清理Snap包
+          sudo snap list --all | awk '{ print $1 }' | xargs -I {} sudo snap remove {} || true
+          
+          # 删除大型软件包
+          sudo apt-get remove -y '^aspnetcore-.*' || true
+          sudo apt-get remove -y '^dotnet-.*' --fix-missing || true
+          sudo apt-get remove -y '^llvm-.*' --fix-missing || true
+          sudo apt-get remove -y 'php.*' --fix-missing || true
+          sudo apt-get remove -y '^mongodb-.*' --fix-missing || true
+          sudo apt-get remove -y '^mysql-.*' --fix-missing || true
+          sudo apt-get remove -y '^postgresql-.*' --fix-missing || true
+          sudo apt-get remove -y azure-cli google-chrome-stable firefox powershell mono-devel || true
+          sudo apt-get remove -y microsoft-edge-stable || true
+          sudo apt-get remove -y google-cloud-sdk || true
+          sudo apt-get remove -y temurin-* adoptopenjdk-* || true
+          
+          # 清理apt缓存
+          sudo apt-get autoremove -y
+          sudo apt-get clean
+          sudo apt-get autoclean -y
+          sudo rm -rf /var/lib/apt/lists/*
+          
+          echo "清理后的磁盘空间："
+          df -h
+      
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: 设置 Python 环境
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update
+
+          # 添加 Ubuntu Toolchain PPA 以获取新版本的 GCC/libstdc++
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get update
+
+          # 安装 GCC 13 和新版 libstdc++
+          sudo apt-get install -y gcc-13 g++-13 libstdc++-13-dev
+
+          # 设置 GCC 13 为默认编译器
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 100
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 100
+
+          sudo apt-get install -y \
+            build-essential \
+            git \
+            python3 \
+            python3-pip \
+            libglu1-mesa-dev \
+            libgl1-mesa-dev \
+            libxkbcommon-x11-0 \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-render-util0 \
+            libxcb-xinerama0 \
+            libxcb-xkb1 \
+            libxkbcommon-dev \
+            p7zip-full \
+            curl \
+            wget
+      
+      - name: 安装 Python 依赖
+        run: |
+          python3 -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then python3 -m pip install -r requirements.txt; fi
+      
+      - name: 清理npm冲突文件
+        run: |
+          sudo rm -f /usr/local/bin/grunt
+          sudo rm -f /usr/local/bin/pkg
+        continue-on-error: true
+      
+      - name: 执行构建
+        env:
+          PYTHONPATH: ${{ github.workspace }}/scripts
+        run: |
+          echo "构建前磁盘空间："
+          df -h
+
+          python3 --version
+          cd tools/linux
+          pwd
+          ls
+          if [ -n "${{ inputs.branch }}" ]; then
+            echo ${{ inputs.modules }} ${{ inputs.branch }}
+            python3 ./automate.py ${{ inputs.modules }} --branch=${{ inputs.branch }}
+          else
+            echo ${{ inputs.modules }}
+            python3 ./automate.py ${{ inputs.modules }}
+          fi
+
+          echo "构建后磁盘空间："
+          df -h
+      
+      - name: 清理构建临时文件
+        run: |
+          echo "清理前磁盘空间："
+          df -h
+          
+          # 清理Qt源码和压缩包（保留编译好的qt_build）
+          cd tools/linux
+          sudo rm -rf qt-everywhere-opensource-src-* || true
+          sudo rm -rf *.tar.xz || true
+          sudo rm -rf *.tar.gz || true
+          sudo rm -rf *.7z || true
+          sudo rm -rf *.zip || true
+          
+          # 清理npm和node缓存
+          sudo rm -rf /root/.npm || true
+          sudo rm -rf ~/.npm || true
+          sudo rm -rf /root/.node-gyp || true
+          sudo rm -rf ~/.node-gyp || true
+          
+          # 清理Python缓存
+          sudo rm -rf /root/.cache/pip || true
+          sudo rm -rf ~/.cache/pip || true
+          find . -type d -name "__pycache__" -exec sudo rm -rf {} + || true
+          find . -type f -name "*.pyc" -delete || true
+          
+          # 清理构建中间文件
+          sudo rm -rf /tmp/* || true
+          sudo rm -rf /var/tmp/* || true
+          sudo rm -rf /root/.cache/* || true
+          sudo rm -rf ~/.cache/* || true
+          
+          # 清理ccache缓存
+          sudo rm -rf /root/.ccache || true
+          sudo rm -rf ~/.ccache || true
+          
+          # 清理Git临时文件
+          git gc --aggressive || true
+          
+          # 显示最大的目录（用于调试）
+          echo "最大的目录："
+          du -h --max-depth=2 . 2>/dev/null | sort -hr | head -20 || true
+          
+          echo "清理后磁盘空间："
+          df -h
+      
+      - name: 查找构建产物
+        id: find_artifacts
+        run: |
+          echo "查找构建产物..."
+          if [ -d "out" ]; then
+            echo "找到 out 目录"
+            ls -lah out/
+            echo "artifact_path=out" >> $GITHUB_OUTPUT
+          elif [ -d "tools/linux/out" ]; then
+            echo "找到 tools/linux/out 目录"
+            ls -lah tools/linux/out/
+            echo "artifact_path=tools/linux/out" >> $GITHUB_OUTPUT
+          elif [ -d "server" ]; then
+            echo "找到 server 目录"
+            ls -lah server/
+            echo "artifact_path=server" >> $GITHUB_OUTPUT
+          else
+            echo "在根目录查找所有可能的产物目录..."
+            find . -maxdepth 3 -type d \( -name "out" -o -name "build" -o -name "dist" -o -name "*server*" \) -exec ls -lah {} \;
+            echo "artifact_path=." >> $GITHUB_OUTPUT
+          fi
+      
+      - name: 打包构建产物
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          ARTIFACT_NAME="onlyoffice-server-build-${TIMESTAMP}"
+          
+          if [ -d "out" ]; then
+            tar -czf ${ARTIFACT_NAME}.tar.gz -C out .
+          elif [ -d "tools/linux/out" ]; then
+            tar -czf ${ARTIFACT_NAME}.tar.gz -C tools/linux/out .
+          elif [ -d "server" ]; then
+            tar -czf ${ARTIFACT_NAME}.tar.gz -C server .
+          else
+            echo "未找到标准构建目录，打包整个workspace（排除源代码）"
+            tar -czf ${ARTIFACT_NAME}.tar.gz \
+              --exclude='.git' \
+              --exclude='node_modules' \
+              --exclude='qt_build' \
+              --exclude='qt-everywhere-opensource-src-*' \
+              --exclude='*.tar.xz' \
+              --exclude='*.7z' \
+              .
+          fi
+          
+          echo "ARTIFACT_NAME=${ARTIFACT_NAME}" >> $GITHUB_ENV
+      
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.ARTIFACT_NAME }}.tar.gz
+          retention-days: 30
+      
+      - name: 构建摘要
+        run: |
+          echo "## 构建完成 ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 构建信息" >> $GITHUB_STEP_SUMMARY
+          echo "- **构建模块**: ${{ inputs.modules }}" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ inputs.branch }}" ]; then
+            echo "- **构建分支**: ${{ inputs.branch }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **构建分支**: 当前分支" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "- **构建时间**: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 下载产物" >> $GITHUB_STEP_SUMMARY
+          echo "构建产物已打包为: \`${ARTIFACT_NAME}.tar.gz\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "请在 Actions 页面的 Artifacts 部分下载构建产物。" >> $GITHUB_STEP_SUMMARY
+
