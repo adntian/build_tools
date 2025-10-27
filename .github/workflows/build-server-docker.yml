@@ -1,0 +1,332 @@
+name: Build Server (Docker Ubuntu 16.04)
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: '构建分支'
+        required: false
+        type: string
+        default: ''
+      modules:
+        description: '构建模块 (默认: server)'
+        required: false
+        type: string
+        default: 'server'
+
+jobs:
+  build-server:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 释放磁盘空间
+        run: |
+          echo "清理前的磁盘空间："
+          df -h
+          
+          # 删除不需要的大型工具和SDK
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          
+          # 删除更多不需要的工具链
+          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf /usr/local/share/powershell
+          sudo rm -rf /usr/local/share/chromium
+          sudo rm -rf /usr/local/lib/node_modules
+          sudo rm -rf /usr/share/rust
+          sudo rm -rf /opt/microsoft
+          
+          # 删除文档和man页面
+          sudo rm -rf /usr/share/doc/*
+          sudo rm -rf /usr/share/man/*
+          sudo rm -rf /usr/share/locale/*
+          
+          # 删除 Kubernetes 和云工具
+          sudo rm -rf /usr/local/bin/kubectl
+          sudo rm -rf /usr/local/bin/kustomize
+          sudo rm -rf /usr/local/bin/helm
+          sudo rm -rf /usr/local/bin/terraform
+          sudo rm -rf /usr/local/bin/packer
+          sudo rm -rf /opt/hostedtoolcache/go
+          sudo rm -rf /opt/hostedtoolcache/Ruby
+          sudo rm -rf /opt/hostedtoolcache/Python
+          
+          # 删除Docker镜像和容器
+          docker system prune -af --volumes || true
+          
+          # 清理Snap包
+          sudo snap list --all | awk '{ print $1 }' | xargs -I {} sudo snap remove {} || true
+          
+          # 删除大型软件包
+          sudo apt-get remove -y '^aspnetcore-.*' || true
+          sudo apt-get remove -y '^dotnet-.*' --fix-missing || true
+          sudo apt-get remove -y '^llvm-.*' --fix-missing || true
+          sudo apt-get remove -y 'php.*' --fix-missing || true
+          sudo apt-get remove -y '^mongodb-.*' --fix-missing || true
+          sudo apt-get remove -y '^mysql-.*' --fix-missing || true
+          sudo apt-get remove -y '^postgresql-.*' --fix-missing || true
+          sudo apt-get remove -y azure-cli google-chrome-stable firefox powershell mono-devel || true
+          sudo apt-get remove -y microsoft-edge-stable || true
+          sudo apt-get remove -y google-cloud-sdk || true
+          sudo apt-get remove -y temurin-* adoptopenjdk-* || true
+          
+          # 清理apt缓存
+          sudo apt-get autoremove -y
+          sudo apt-get clean
+          sudo apt-get autoclean -y
+          sudo rm -rf /var/lib/apt/lists/*
+          
+          echo "清理后的磁盘空间："
+          df -h
+      
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: 构建 Docker 镜像
+        run: |
+          cat > Dockerfile.build << 'EOF'
+          FROM ubuntu:16.04
+
+          # 设置非交互模式
+          ENV DEBIAN_FRONTEND=noninteractive
+          ENV TZ=Asia/Shanghai
+
+          # 更新软件源（使用阿里云镜像，16.04已停止支持）
+          RUN sed -i 's/archive.ubuntu.com/old-releases.ubuntu.com/g' /etc/apt/sources.list && \
+              sed -i 's/security.ubuntu.com/old-releases.ubuntu.com/g' /etc/apt/sources.list && \
+              apt-get update
+
+          # 安装基础依赖
+          RUN apt-get install -y \
+              build-essential \
+              git \
+              python \
+              python-pip \
+              curl \
+              wget \
+              ca-certificates \
+              p7zip-full \
+              software-properties-common \
+              apt-transport-https
+
+          # 添加PPA获取较新版本的工具
+          RUN add-apt-repository -y ppa:ubuntu-toolchain-r/test && \
+              apt-get update
+
+          # 安装GCC 7（16.04上较新的版本）
+          RUN apt-get install -y gcc-7 g++-7 && \
+              update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 100 && \
+              update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-7 100
+
+          # 安装Qt依赖
+          RUN apt-get install -y \
+              libglu1-mesa-dev \
+              libgl1-mesa-dev \
+              libxkbcommon-x11-0 \
+              libxcb-icccm4 \
+              libxcb-image0 \
+              libxcb-keysyms1 \
+              libxcb-render-util0 \
+              libxcb-xinerama0 \
+              libxcb-xkb1 \
+              libxkbcommon-dev \
+              libx11-xcb-dev \
+              libxrender-dev \
+              libxi-dev \
+              libxext-dev
+
+          # 设置工作目录
+          WORKDIR /workspace
+
+          # 设置Git安全目录
+          RUN git config --global --add safe.directory /workspace
+
+          CMD ["/bin/bash"]
+          EOF
+
+          docker build -f Dockerfile.build -t onlyoffice-build:ubuntu16.04 .
+      
+      - name: 在 Docker 容器中执行构建
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            onlyoffice-build:ubuntu16.04 \
+            /bin/bash -c "
+              set -e
+              echo '=== 构建前磁盘空间 ==='
+              df -h
+              
+              echo '=== 显示构建环境信息 ==='
+              gcc --version
+              g++ --version
+              python --version
+              git --version
+              
+              echo '=== 开始构建 ==='
+              cd tools/linux
+              
+              if [ -n '${{ inputs.branch }}' ]; then
+                echo '构建模块: ${{ inputs.modules }}, 分支: ${{ inputs.branch }}'
+                python ./automate.py ${{ inputs.modules }} --branch=${{ inputs.branch }}
+              else
+                echo '构建模块: ${{ inputs.modules }}'
+                python ./automate.py ${{ inputs.modules }}
+              fi
+              
+              echo '=== 构建后磁盘空间 ==='
+              df -h
+            "
+      
+      - name: 清理构建临时文件
+        run: |
+          echo "清理前磁盘空间："
+          df -h
+          
+          # 清理Qt源码和压缩包
+          cd tools/linux
+          sudo rm -rf qt-everywhere-opensource-src-* || true
+          sudo rm -rf *.tar.xz || true
+          sudo rm -rf *.tar.gz || true
+          sudo rm -rf *.7z || true
+          sudo rm -rf *.zip || true
+          
+          # 清理各种缓存
+          sudo rm -rf /root/.npm || true
+          sudo rm -rf ~/.npm || true
+          sudo rm -rf /root/.cache || true
+          sudo rm -rf ~/.cache || true
+          sudo rm -rf /tmp/* || true
+          sudo rm -rf /var/tmp/* || true
+          
+          # 清理Docker镜像
+          docker rmi onlyoffice-build:ubuntu16.04 || true
+          docker system prune -af || true
+          
+          # 显示最大的目录
+          echo "最大的目录："
+          du -h --max-depth=2 . 2>/dev/null | sort -hr | head -20 || true
+          
+          echo "清理后磁盘空间："
+          df -h
+      
+      - name: 查找构建产物
+        id: find_artifacts
+        run: |
+          echo "查找构建产物..."
+          echo "=== 检查标准构建路径 ==="
+          
+          # 检查官方文档指定的路径
+          if [ -d "out/linux_64/onlyoffice/documentserver" ]; then
+            echo "✓ 找到标准构建路径: out/linux_64/onlyoffice/documentserver"
+            ls -lah out/linux_64/onlyoffice/documentserver/
+            du -sh out/linux_64/onlyoffice/documentserver/
+            echo "artifact_path=out/linux_64/onlyoffice/documentserver" >> $GITHUB_OUTPUT
+          elif [ -d "out/linux_64/onlyoffice" ]; then
+            echo "✓ 找到 out/linux_64/onlyoffice 目录"
+            ls -lah out/linux_64/onlyoffice/
+            echo "artifact_path=out/linux_64/onlyoffice" >> $GITHUB_OUTPUT
+          elif [ -d "out/linux_64" ]; then
+            echo "✓ 找到 out/linux_64 目录"
+            ls -lah out/linux_64/
+            echo "artifact_path=out/linux_64" >> $GITHUB_OUTPUT
+          elif [ -d "out" ]; then
+            echo "✓ 找到 out 目录"
+            ls -lah out/
+            echo "artifact_path=out" >> $GITHUB_OUTPUT
+          else
+            echo "⚠ 未找到标准构建目录，搜索所有可能的位置..."
+            find . -maxdepth 5 -type d -name "documentserver" -o -name "onlyoffice" | head -10 || true
+            echo "artifact_path=." >> $GITHUB_OUTPUT
+          fi
+      
+      - name: 打包构建产物
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          ARTIFACT_NAME="onlyoffice-server-docker-${TIMESTAMP}"
+          
+          echo "=== 开始打包构建产物 ==="
+          
+          # 优先打包官方文档指定的路径
+          if [ -d "out/linux_64/onlyoffice/documentserver" ]; then
+            echo "✓ 打包标准路径: out/linux_64/onlyoffice/documentserver"
+            echo "目录内容："
+            ls -lah out/linux_64/onlyoffice/documentserver/ | head -20
+            echo "目录大小："
+            du -sh out/linux_64/onlyoffice/documentserver/
+            tar -czf ${ARTIFACT_NAME}.tar.gz -C out/linux_64/onlyoffice documentserver
+          elif [ -d "out/linux_64/onlyoffice" ]; then
+            echo "✓ 打包 out/linux_64/onlyoffice 目录"
+            tar -czf ${ARTIFACT_NAME}.tar.gz -C out/linux_64 onlyoffice
+          elif [ -d "out/linux_64" ]; then
+            echo "✓ 打包 out/linux_64 目录"
+            tar -czf ${ARTIFACT_NAME}.tar.gz -C out linux_64
+          elif [ -d "out" ]; then
+            echo "✓ 打包 out 目录"
+            tar -czf ${ARTIFACT_NAME}.tar.gz -C out .
+          else
+            echo "⚠ 未找到标准构建目录，打包整个workspace（排除源代码）"
+            tar -czf ${ARTIFACT_NAME}.tar.gz \
+              --exclude='.git' \
+              --exclude='node_modules' \
+              --exclude='qt_build' \
+              --exclude='qt-everywhere-opensource-src-*' \
+              --exclude='*.tar.xz' \
+              --exclude='*.7z' \
+              .
+          fi
+          
+          echo "ARTIFACT_NAME=${ARTIFACT_NAME}" >> $GITHUB_ENV
+          
+          # 显示打包文件信息
+          echo "=== 打包完成 ==="
+          ls -lh ${ARTIFACT_NAME}.tar.gz
+          echo "文件大小: $(du -h ${ARTIFACT_NAME}.tar.gz | cut -f1)"
+      
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.ARTIFACT_NAME }}.tar.gz
+          retention-days: 30
+      
+      - name: 构建摘要
+        run: |
+          echo "## 构建完成 ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 构建信息" >> $GITHUB_STEP_SUMMARY
+          echo "- **构建环境**: Docker Ubuntu 16.04" >> $GITHUB_STEP_SUMMARY
+          echo "- **构建模块**: ${{ inputs.modules }}" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ inputs.branch }}" ]; then
+            echo "- **构建分支**: ${{ inputs.branch }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **构建分支**: 当前分支" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "- **构建时间**: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### 构建产物位置" >> $GITHUB_STEP_SUMMARY
+          echo "根据 ONLYOFFICE 官方文档，构建产物位于项目根目录下：" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "out/linux_64/onlyoffice/documentserver/" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### 下载产物" >> $GITHUB_STEP_SUMMARY
+          echo "构建产物已打包为: \`${ARTIFACT_NAME}.tar.gz\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f "${ARTIFACT_NAME}.tar.gz" ]; then
+            FILESIZE=$(du -h ${ARTIFACT_NAME}.tar.gz | cut -f1)
+            echo "- **文件大小**: ${FILESIZE}" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "请在 Actions 页面的 **Artifacts** 部分下载构建产物。" >> $GITHUB_STEP_SUMMARY
+
