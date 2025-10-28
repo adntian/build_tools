@@ -4,51 +4,25 @@ ENV TZ=Etc/UTC
 ENV DEBIAN_FRONTEND=noninteractive
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# 安装所有必要的构建依赖（参考 tools/linux/deps.py）
-RUN apt-get -y update && \
-    apt-get -y install \
-    tar \
-    sudo \
-    build-essential \
-    git \
-    cmake \
-    curl \
-    wget \
-    ca-certificates \
-    p7zip-full \
-    autoconf2.13 \
-    libtool \
-    subversion \
-    gzip \
-    apt-transport-https \
-    glib-2.0-dev \
-    libglu1-mesa-dev \
-    libgtk-3-dev \
-    libpulse-dev \
-    libasound2-dev \
-    libatspi2.0-dev \
-    libcups2-dev \
-    libdbus-1-dev \
-    libicu-dev \
-    libgstreamer1.0-dev \
-    libgstreamer-plugins-base1.0-dev \
-    libx11-xcb-dev \
-    libxcb-icccm4 \
-    libxcb-image0 \
-    libxcb-keysyms1 \
-    libxcb-render-util0 \
-    libxcb-xinerama0 \
-    libxcb-xkb1 \
-    libxi-dev \
-    libxrender-dev \
-    libxss1 \
-    libncurses5 \
-    libncurses6 \
-    libxkbcommon-dev \
-    libxkbcommon-x11-dev \
-    nodejs \
-    npm \
-    && rm -rf /var/lib/apt/lists/*
+# 安装 Server 构建的最小必需依赖（带重试机制）
+RUN for i in 1 2 3; do \
+      apt-get -y update && \
+      apt-get -y install --fix-missing --no-install-recommends \
+        tar \
+        sudo \
+        build-essential \
+        git \
+        cmake \
+        curl \
+        wget \
+        ca-certificates \
+        p7zip-full \
+        libicu-dev \
+        nodejs \
+        npm \
+      && break || sleep 15; \
+    done && \
+    rm -rf /var/lib/apt/lists/*
 
 ADD . /build_tools
 WORKDIR /build_tools
