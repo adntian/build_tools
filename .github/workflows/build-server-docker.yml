@@ -149,35 +149,33 @@ jobs:
           echo "=== 开始构建 ==="
           
           # 根据是否指定分支来构建不同的命令
-          if [ -n "${{ inputs.branch }}" ]; then
-            echo "构建模块: ${{ inputs.modules }}, 分支: ${{ inputs.branch }}"
-            docker run --rm \
-              -v ${{ github.workspace }}/out:/build_tools/out \
-              onlyoffice-document-editors-builder \
-              sh -c "set -e && \
-                echo '=== 显示构建环境信息 ===' && \
-                python --version && \
-                pwd && \
-                echo '=== 开始构建 ===' && \
-                cd tools/linux && \
-                python ./automate.py ${{ inputs.modules }} --branch=${{ inputs.branch }} && \
-                echo '=== 构建完成 ===' && \
-                ls -lah /build_tools/out/ || echo '未找到 out 目录'"
+          BRANCH="${{ inputs.branch }}"
+          if [ -z "$BRANCH" ]; then
+            BRANCH="develop"
+            echo "构建模块: ${{ inputs.modules }}, 分支: develop (默认)"
           else
-            echo "构建模块: ${{ inputs.modules }}"
-            docker run --rm \
-              -v ${{ github.workspace }}/out:/build_tools/out \
-              onlyoffice-document-editors-builder \
-              sh -c "set -e && \
-                echo '=== 显示构建环境信息 ===' && \
-                python --version && \
-                pwd && \
-                echo '=== 开始构建 ===' && \
-                cd tools/linux && \
-                python ./automate.py ${{ inputs.modules }} && \
-                echo '=== 构建完成 ===' && \
-                ls -lah /build_tools/out/ || echo '未找到 out 目录'"
+            echo "构建模块: ${{ inputs.modules }}, 分支: $BRANCH"
           fi
+          
+          docker run --rm \
+            -v ${{ github.workspace }}/out:/build_tools/out \
+            -e BUILD_BRANCH="$BRANCH" \
+            -e BUILD_MODULE="${{ inputs.modules }}" \
+            onlyoffice-document-editors-builder \
+            sh -c 'set -e && \
+              echo "=== 显示构建环境信息 ===" && \
+              python --version && \
+              pwd && \
+              echo "=== 开始构建 ===" && \
+              echo "分支: $BUILD_BRANCH" && \
+              echo "模块: $BUILD_MODULE" && \
+              cd /build_tools && \
+              echo "配置构建参数..." && \
+              python ./configure.py --module "$BUILD_MODULE" --branch="$BUILD_BRANCH" --update 1 --clean 1 --qt-dir /build_tools/tools/linux/qt_build/Qt-5.9.9 && \
+              echo "开始编译..." && \
+              python ./make.py && \
+              echo "=== 构建完成 ===" && \
+              ls -lah /build_tools/out/ || echo "未找到 out 目录"'
           
           echo "=== 构建后磁盘空间 ==="
           df -h
