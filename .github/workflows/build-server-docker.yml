@@ -95,11 +95,45 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: 构建 Docker 镜像 (使用官方 Dockerfile)
+      - name: 构建 Docker 镜像 (增强版)
         run: |
-          echo "=== 构建 Docker 镜像 ==="
-          echo "使用官方 Dockerfile (Ubuntu 20.04 + Python 3.10)"
-          docker build --tag onlyoffice-document-editors-builder .
+          echo "=== 构建增强版 Docker 镜像 ==="
+          
+          # 创建增强版 Dockerfile
+          cat > Dockerfile.enhanced << 'EOF'
+          FROM ubuntu:20.04
+
+          ENV TZ=Etc/UTC
+          RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+          # 安装基础工具和依赖
+          RUN apt-get -y update && \
+              apt-get -y install \
+                tar \
+                sudo \
+                git \
+                curl \
+                wget \
+                build-essential \
+                p7zip-full
+
+          ADD . /build_tools
+          WORKDIR /build_tools
+
+          RUN mkdir -p /opt/python3 && \
+              tar -xzf /build_tools/tools/linux/python3.tar.gz -C /opt/python3 --strip-components=1
+
+          ENV PATH="/opt/python3/bin:${PATH}"
+
+          RUN ln -s /opt/python3/bin/python3.10 /usr/bin/python
+
+          # 设置 Git 安全目录
+          RUN git config --global --add safe.directory /build_tools
+
+          CMD ["sh", "-c", "cd tools/linux && python3 ./automate.py"]
+          EOF
+
+          docker build -f Dockerfile.enhanced --tag onlyoffice-document-editors-builder .
           
           echo "=== 镜像构建完成 ==="
           docker images | grep onlyoffice
@@ -107,7 +141,7 @@ jobs:
       - name: 在 Docker 容器中执行构建
         run: |
           echo "=== 准备构建目录 ==="
-          mkdir out
+          mkdir -p ${{ github.workspace }}/out
           
           echo "=== 构建前磁盘空间 ==="
           df -h
@@ -118,7 +152,7 @@ jobs:
           if [ -n "${{ inputs.branch }}" ]; then
             echo "构建模块: ${{ inputs.modules }}, 分支: ${{ inputs.branch }}"
             docker run --rm \
-              -v ./out:/build_tools/out \
+              -v ${{ github.workspace }}/out:/build_tools/out \
               onlyoffice-document-editors-builder \
               sh -c "set -e && \
                 echo '=== 显示构建环境信息 ===' && \
@@ -132,7 +166,7 @@ jobs:
           else
             echo "构建模块: ${{ inputs.modules }}"
             docker run --rm \
-              -v ./out:/build_tools/out \
+              -v ${{ github.workspace }}/out:/build_tools/out \
               onlyoffice-document-editors-builder \
               sh -c "set -e && \
                 echo '=== 显示构建环境信息 ===' && \
@@ -142,22 +176,47 @@ jobs:
                 cd tools/linux && \
                 python ./automate.py ${{ inputs.modules }} && \
                 echo '=== 构建完成 ===' && \
-                ls -lah ./out/ || echo '未找到 out 目录'"
+                ls -lah /build_tools/out/ || echo '未找到 out 目录'"
           fi
-
-          pwd
-
-          echo "ls -lah ./"
-          ls -lah ./
-
-          echo "ls -lah ./out/"
-          ls -lah ./out/
-
+          
           echo "=== 构建后磁盘空间 ==="
           df -h
           
           echo "=== 检查构建产物 ==="
           ls -lah ${{ github.workspace }}/out/
+      
+      - name: 清理构建临时文件
+        if: ${{ inputs.clean_disk }}
+        run: |
+          echo "清理前磁盘空间："
+          df -h
+          
+          # 清理Qt源码和压缩包
+          cd tools/linux
+          sudo rm -rf qt-everywhere-opensource-src-* || true
+          sudo rm -rf *.tar.xz || true
+          sudo rm -rf *.tar.gz || true
+          sudo rm -rf *.7z || true
+          sudo rm -rf *.zip || true
+          
+          # 清理各种缓存
+          sudo rm -rf /root/.npm || true
+          sudo rm -rf ~/.npm || true
+          sudo rm -rf /root/.cache || true
+          sudo rm -rf ~/.cache || true
+          sudo rm -rf /tmp/* || true
+          sudo rm -rf /var/tmp/* || true
+          
+          # 清理Docker镜像
+          docker rmi onlyoffice-document-editors-builder || true
+          docker system prune -af || true
+          
+          # 显示最大的目录
+          echo "最大的目录："
+          du -h --max-depth=2 . 2>/dev/null | sort -hr | head -20 || true
+          
+          echo "清理后磁盘空间："
+          df -h
       
       - name: 查找构建产物
         id: find_artifacts
